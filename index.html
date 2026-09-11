@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#131920">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>근육저축</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- 로그인 ------------------------------------------------------ -->
+<div id="gate">
+  <form id="loginForm" autocomplete="on">
+    <h1>근육저축</h1>
+    <p>오늘 넣은 만큼 남는다.</p>
+    <label for="email">아이디</label>
+    <input class="field" id="email" name="username" type="email" required autocomplete="username" inputmode="email">
+    <label for="pw">비밀번호</label>
+    <input class="field" id="pw" name="password" type="password" required autocomplete="current-password">
+    <button class="btn-main" type="submit" id="loginBtn">들어가기</button>
+  </form>
+</div>
+
+<!-- 헤더 -------------------------------------------------------- -->
+<header hidden id="topbar">
+  <h2 id="screenTitle">기록</h2>
+  <div class="who" id="whoSwitch" role="group" aria-label="대상 선택"></div>
+  <button class="icon-btn" id="logoutBtn" title="로그아웃">나가기</button>
+</header>
+
+<main hidden id="app">
+
+  <!-- 기록 ------------------------------------------------------ -->
+  <section class="screen is-on" id="sc-log">
+    <div class="datebar">
+      <button id="dayPrev" aria-label="전날">‹</button>
+      <button class="today" id="dayLabel"></button>
+      <button id="dayNext" aria-label="다음날">›</button>
+    </div>
+
+    <div class="tiles" id="tiles"></div>
+
+    <div class="block">
+      <h3 id="dayCount">이 날의 기록</h3>
+      <div class="rows" id="dayRows"></div>
+    </div>
+
+    <div class="block">
+      <h3>몸무게 · 메모</h3>
+      <div class="daycard">
+        <div class="line">
+          <label for="weight">몸무게</label>
+          <input class="field num" id="weight" type="number" step="0.1" min="20" max="200" inputmode="decimal" placeholder="kg">
+        </div>
+        <div class="line">
+          <label for="dayNote">메모</label>
+          <textarea class="field" id="dayNote" rows="2" placeholder="쉰 이유, 여행, 컨디션…"></textarea>
+        </div>
+        <label class="switch"><input type="checkbox" id="isRest"> 오늘은 쉬는 날</label>
+      </div>
+    </div>
+  </section>
+
+  <!-- 대시보드 -------------------------------------------------- -->
+  <section class="screen" id="sc-dash">
+    <div class="seg" id="dashSeg" role="group" aria-label="대시보드 화면">
+      <button data-view="recent" aria-pressed="true">최근</button>
+      <button data-view="period" aria-pressed="false">기간</button>
+      <button data-view="best" aria-pressed="false">최고</button>
+    </div>
+    <div id="dashBody"></div>
+  </section>
+
+  <!-- 매뉴얼 ---------------------------------------------------- -->
+  <section class="screen manual" id="sc-manual"></section>
+
+</main>
+
+<!-- 입력 시트 --------------------------------------------------- -->
+<div id="sheet" hidden>
+  <div class="sheet-body" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="sheet-head">
+      <h3 id="sheetTitle"></h3>
+      <span id="sheetSub"></span>
+      <button class="close" id="sheetClose" aria-label="닫기">✕</button>
+    </div>
+    <div id="sheetFields"></div>
+    <button class="btn-main" id="sheetSave">저장</button>
+  </div>
+</div>
+
+<!-- 하단 탭 ----------------------------------------------------- -->
+<nav hidden id="tabs" role="group" aria-label="화면 이동">
+  <button data-screen="log" aria-pressed="true"><i>✍️</i>기록</button>
+  <button data-screen="dash" aria-pressed="false"><i>📊</i>대시보드</button>
+  <button data-screen="manual" aria-pressed="false"><i>🎬</i>매뉴얼</button>
+</nav>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
