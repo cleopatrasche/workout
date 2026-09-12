@@ -39,7 +39,7 @@ export const EXERCISES = [
   { code: 'cycling',   name: '사이클',   group: '유산소', icon: '🚲', fields: ['time', 'distance'] },
   { code: 'badminton', name: '배드민턴', group: '기타',   icon: '🏸', fields: ['time'] },
   { code: 'hiking',    name: '등산',     group: '기타',   icon: '⛰️', fields: ['time', 'distance'] },
-  { code: 'plank',     name: '플랭크',   group: '맨몸',   icon: '🧘', fields: ['reps'] },
+  { code: 'plank',     name: '플랭크',   group: '맨몸',   icon: '🧘', fields: ['time'] },
   { code: 'etc',       name: '기타',     group: '기타',   icon: '➕', fields: ['time'] },
 ];
 
