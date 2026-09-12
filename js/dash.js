@@ -1,5 +1,10 @@
 // 대시보드. 서버 집계 없이, 기간 원본을 한 번 받아 브라우저에서 계산한다.
 // 4년 치가 2천 행 남짓이라 이 방식이 훨씬 단순하고 충분히 빠르다.
+//
+// load / build / draw 3단으로 갈라 둔 데는 이유가 있다 (CLAUDE.md 3절·7절).
+//   load  : 비동기. 데이터만 가져온다
+//   build : 동기. DOM 을 만든다 — 중간에 다른 렌더가 끼어들 수 없다
+//   draw  : requestAnimationFrame. 레이아웃이 끝난 뒤에 차트를 올린다
 import Chart from 'https://cdn.jsdelivr.net/npm/chart.js@4.4.4/auto/+esm';
 import { EXERCISES, EX_BY_CODE, SETTINGS, PEOPLE } from './data.js';
 import * as db from './db.js';
@@ -11,7 +16,7 @@ import {
 Chart.defaults.color = '#8B99AB';
 Chart.defaults.font.family = "'Pretendard Variable', Pretendard, system-ui, sans-serif";
 Chart.defaults.font.size = 11;
-Chart.defaults.animation = { duration: 220 };
+Chart.defaults.animation.duration = 220;   // 통째로 대입하면 easing 등 기본값이 날아간다
 
 const METRICS = {
   reps:     { unit: '개',  get: (r) => r.reps ?? 0 },
@@ -19,6 +24,9 @@ const METRICS = {
   distance: { unit: 'km',  get: (r) => Number(r.distance_km ?? 0) },
   laps:     { unit: '회',  get: (r) => Number(r.laps ?? 0) },
 };
+
+const PALETTE = ['#45B3E0', '#F2B441', '#5BD6A0', '#FF7A66', '#A78BFA',
+                 '#4ADE80', '#F472B6', '#38BDF8', '#FBBF24', '#94A3B8'];
 
 const PERIODS = [
   { key: '30',   label: '30일',   days: 30 },
@@ -32,17 +40,31 @@ const PERIODS = [
 let view = 'recent';
 let chipCode = 'pushup';
 let periodKey = '30';
-let charts = [];
-let cache = null;   // { from, to, logs, notes }
+
+let charts = [];    // 지금 화면에 살아 있는 Chart 인스턴스
+let queued = [];    // build 단계가 예약한 차트. draw 단계가 비운다
+let token = 0;      // 렌더 세대 번호. 늦게 끝난 이전 렌더를 걸러낸다
 
 // ── 데이터 ──────────────────────────────────────────────────────
-export function invalidate() { cache = null; }
+let cache = null;      // { from, to, logs, notes }
+let inflight = null;   // { from, to, p } — 같은 범위를 두 번 받아오지 않는다
+
+export function invalidate() { cache = null; inflight = null; }
 
 async function fetchRange(from, to) {
   if (cache && cache.from <= from && cache.to >= to) return cache;
-  const [logs, notes] = await Promise.all([db.loadLogs(from, to), db.loadNotes(from, to)]);
-  cache = { from, to, logs, notes };
-  return cache;
+  if (inflight && inflight.from <= from && inflight.to >= to) return inflight.p;
+
+  // 이미 받아 둔 범위를 좁히지 않는다. 좁히면 탭을 오갈 때마다 다시 받게 된다
+  const lo = cache && cache.from < from ? cache.from : from;
+  const hi = cache && cache.to > to ? cache.to : to;
+
+  const p = Promise.all([db.loadLogs(lo, hi), db.loadNotes(lo, hi)])
+    .then(([logs, notes]) => { cache = { from: lo, to: hi, logs, notes }; inflight = null; return cache; })
+    .catch((e) => { inflight = null; throw e; });
+
+  inflight = { from: lo, to: hi, p };
+  return p;
 }
 
 const mine = (rows) => rows.filter((r) => r.person_id === state.personId);
@@ -63,21 +85,72 @@ export function bindDash() {
 }
 
 export async function renderDash() {
+  const my = ++token;
   for (const b of $('#dashSeg').children) {
     b.setAttribute('aria-pressed', String(b.dataset.view === view));
   }
-  charts.forEach((c) => c.destroy());
-  charts = [];
+  destroyCharts();
   const body = $('#dashBody');
   mount(body, el('p', { class: 'empty', text: '집계하는 중…' }));
 
+  let data;
   try {
-    if (view === 'recent') await viewRecent(body);
-    else if (view === 'period') await viewPeriod(body);
-    else await viewBest(body);
+    data = view === 'recent' ? await loadRecent()
+         : view === 'period' ? await loadPeriod()
+         : await loadBest();
   } catch (e) {
+    if (my !== token) return;
     mount(body, el('p', { class: 'empty', text: `불러오지 못했다: ${e.message}` }));
+    return;
   }
+
+  // 나보다 나중에 시작한 렌더가 있으면 화면을 건드리지 않고 물러난다.
+  // 이게 없으면 늦게 끝난 이전 화면이 지금 화면을 덮어쓴다.
+  if (my !== token) return;
+
+  // 여기부터 mount 까지는 동기다. 다른 렌더가 queued 를 섞어 넣을 수 없다
+  queued = [];
+  const nodes = view === 'recent' ? buildRecent(data)
+              : view === 'period' ? buildPeriod(data)
+              : buildBest(data);
+  mount(body, ...nodes);
+  drawCharts(my);
+}
+
+function destroyCharts() {
+  for (const c of charts) { try { c.destroy(); } catch { /* 이미 죽었으면 그만 */ } }
+  charts = [];
+  queued = [];
+}
+
+/** 레이아웃이 끝난 다음 프레임에 차트를 올린다.
+    microtask 로 그리면 브라우저가 아직 크기를 모르는 상태라 0px 차트가 나온다. */
+function drawCharts(my) {
+  const jobs = queued;
+  queued = [];
+  let waited = 0;
+
+  const run = () => {
+    if (my !== token) return;                       // 이미 다음 화면으로 넘어갔다
+    while (jobs.length) {
+      const { canvas, build } = jobs[0];
+      const wrap = canvas.parentElement;
+      if (!wrap || !wrap.isConnected) { jobs.shift(); continue; }
+      if (!wrap.clientWidth) {                      // 아직 폭이 0 — 한 프레임 더 기다린다
+        if (waited < 20) { waited += 1; requestAnimationFrame(run); return; }
+        jobs.shift();
+        mount(wrap, el('p', { class: 'empty', text: '그래프 자리를 못 잡았다. 화면을 다시 열어 보라.' }));
+        continue;
+      }
+      jobs.shift();
+      try {
+        charts.push(build(canvas));
+      } catch (err) {                               // 조용히 사라지지 않게 화면에 남긴다
+        mount(wrap, el('p', { class: 'empty', text: `그래프를 못 그렸다: ${err.message}` }));
+      }
+    }
+  };
+  requestAnimationFrame(run);
 }
 
 // ── 공통 조각 ───────────────────────────────────────────────────
@@ -91,11 +164,10 @@ const statCard = (value, unit, label) =>
     canvas 에 높이를 주면 라이브러리가 덮어써서 0px 로 무너진다. 반드시 래퍼로 감싼다. */
 function chartBox(build, height = 200) {
   const canvas = el('canvas');
-  const box = el('div', { class: 'chartbox' }, [
+  queued.push({ canvas, build });
+  return el('div', { class: 'chartbox' }, [
     el('div', { class: 'canvas-wrap', style: `height:${height}px` }, [canvas]),
   ]);
-  queueMicrotask(() => charts.push(build(canvas)));
-  return box;
 }
 
 /** 날짜별 집계: {['2026-09-01']: 값} */
@@ -120,10 +192,13 @@ function streak(rows) {
 }
 
 // ── 1) 최근 ─────────────────────────────────────────────────────
-async function viewRecent(body) {
+async function loadRecent() {
+  return fetchRange(addDays(ymd(), -365), ymd());
+}
+
+function buildRecent({ logs }) {
   const days = SETTINGS.recentDays;
   const from = addDays(ymd(), -(days - 1));
-  const { logs } = await fetchRange(addDays(ymd(), -365), ymd());
   const my = mine(logs);
   const recent = my.filter((r) => r.logged_on >= from);
 
@@ -151,26 +226,26 @@ async function viewRecent(body) {
       pointRadius: 3,
       pointHoverRadius: 6,
       tension: 0.25,
-      spanGaps: true,
     };
   });
 
-  mount(body,
+  return [
     el('div', { class: 'stats' }, [
       statCard(last7, '일', '최근 7일 운동'),
       statCard(streak(my), '일', '연속 기록'),
       statCard(thisMonth, '일', '이번 달 운동'),
     ]),
-    el('div', { class: 'chips' }, codes.map((c) =>
+    codes.length ? el('div', { class: 'chips' }, codes.map((c) =>
       el('button', {
         text: EX_BY_CODE[c]?.name ?? c,
         'aria-pressed': String(c === chipCode),
         onclick: () => { chipCode = c; renderDash(); },
-      }))),
+      }))) : null,
     chartBox((cv) => new Chart(cv, {
       type: 'line',
       data: { labels: labels.map(labelShort), datasets },
       options: {
+        responsive: true,
         maintainAspectRatio: false,
         interaction: { mode: 'index', intersect: false },
         plugins: {
@@ -188,7 +263,7 @@ async function viewRecent(body) {
     })),
     recentTable(recent),
     compareRow(logs),
-  );
+  ];
 }
 
 function recentTable(rows) {
@@ -231,10 +306,14 @@ function compareRow(allLogs) {
 }
 
 // ── 2) 기간 ─────────────────────────────────────────────────────
-async function viewPeriod(body) {
+async function loadPeriod() {
   const [from, to] = periodBounds();
   const { logs, notes } = await fetchRange(from, to);
-  const my = mine(logs).filter((r) => r.logged_on >= from);
+  return { logs, notes, from, to };
+}
+
+function buildPeriod({ logs, notes, from, to }) {
+  const my = mine(logs).filter((r) => r.logged_on >= from && r.logged_on <= to);
   const span = daysBetween(from, to) + 1;
   const done = activeDays(my).size;
 
@@ -242,10 +321,10 @@ async function viewPeriod(body) {
   const counts = codes.map((c) => activeDays(my.filter((r) => r.exercise === c)).size);
 
   const weights = mine(notes)
-    .filter((n) => n.logged_on >= from && n.weight_kg != null)
+    .filter((n) => n.logged_on >= from && n.logged_on <= to && n.weight_kg != null)
     .map((n) => ({ d: n.logged_on, w: Number(n.weight_kg) }));
 
-  mount(body,
+  return [
     el('div', { class: 'period' }, PERIODS.map((p) =>
       el('button', {
         text: p.label, 'aria-pressed': String(p.key === periodKey),
@@ -262,20 +341,21 @@ async function viewPeriod(body) {
         labels: codes.map((c) => EX_BY_CODE[c]?.name ?? c),
         datasets: [{
           data: counts,
-          backgroundColor: ['#45B3E0', '#F2B441', '#5BD6A0', '#FF7A66', '#A78BFA',
-                            '#4ADE80', '#F472B6', '#38BDF8', '#FBBF24', '#94A3B8'],
+          backgroundColor: PALETTE,
           borderColor: '#1B232D', borderWidth: 2,
         }],
       },
       options: {
-        maintainAspectRatio: false, cutout: '58%',
+        responsive: true,
+        maintainAspectRatio: false, cutout: '56%',
         plugins: {
-          legend: { position: 'right', labels: { boxWidth: 10, boxHeight: 10, padding: 8 } },
+          // 좁은 휴대폰에서 오른쪽 범례는 도넛을 짓눌러 버린다. 아래로 내린다
+          legend: { position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, padding: 10 } },
           title: { display: true, text: '종목별 운동일수 비중', color: '#E9EEF5',
                    font: { size: 13, weight: '700' }, padding: { bottom: 6 } },
         },
       },
-    }), 230) : el('p', { class: 'empty', text: '이 기간에는 기록이 없다.' }),
+    }), 300) : el('p', { class: 'empty', text: '이 기간에는 기록이 없다.' }),
     periodTable(my, codes),
     weights.length > 1 ? el('div', { class: 'block' }, [
       el('h3', { text: '몸무게' }),
@@ -289,6 +369,7 @@ async function viewPeriod(body) {
           }],
         },
         options: {
+          responsive: true,
           maintainAspectRatio: false,
           plugins: { legend: { display: false } },
           scales: { x: { grid: { display: false }, ticks: { maxRotation: 0 } },
@@ -296,7 +377,7 @@ async function viewPeriod(body) {
         },
       }), 170),
     ]) : null,
-  );
+  ];
 }
 
 function periodTable(rows, codes) {
@@ -329,8 +410,11 @@ function periodTable(rows, codes) {
 }
 
 // ── 3) 최고 ─────────────────────────────────────────────────────
-async function viewBest(body) {
-  const { logs } = await fetchRange('2022-01-01', ymd());
+async function loadBest() {
+  return fetchRange('2022-01-01', ymd());
+}
+
+function buildBest({ logs }) {
   const my = mine(logs);
   const shortFrom = addDays(ymd(), -(SETTINGS.bestWindowDays - 1));
 
@@ -391,7 +475,5 @@ async function viewBest(body) {
     })
     .filter(Boolean);
 
-  mount(body,
-    ...(blocks.length ? blocks : [el('p', { class: 'empty', text: '아직 기록이 없다.' })]),
-  );
+  return blocks.length ? blocks : [el('p', { class: 'empty', text: '아직 기록이 없다.' })];
 }
