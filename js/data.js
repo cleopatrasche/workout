@@ -6,8 +6,8 @@
 // ── 1. 사람 ────────────────────────────────────────────────────
 // id 는 Supabase people 테이블의 id 와 반드시 같아야 한다.
 export const PEOPLE = [
-  { id: 1, code: 'euiyeong', name: '황의영', color: '#45B3E0' },
-  { id: 2, code: 'hwikyung', name: '박휘경', color: '#F2B441' },
+  { id: 1, code: 'HEY', name: '황의영', color: '#45B3E0' },
+  { id: 2, code: 'KIG', name: '박휘경', color: '#F2B441' },
 ];
 
 // ── 2. 운동 종목 ───────────────────────────────────────────────
@@ -28,10 +28,10 @@ export const PEOPLE = [
 //  goal    : (선택) 하루 목표치. 입력 화면 타일에 옅게 표시된다.
 
 export const EXERCISES = [
-  { code: 'pushup',    name: '푸쉬업',   group: '맨몸',   icon: '💪', fields: ['reps'],               goal: 200 },
-  { code: 'pullup',    name: '풀업',     group: '맨몸',   icon: '🧗', fields: ['reps'],               goal: 10  },
-  { code: 'core',      name: '복부',     group: '맨몸',   icon: '🔥', fields: ['reps'],               goal: 200 },
-  { code: 'leg',       name: '하체',     group: '맨몸',   icon: '🦵', fields: ['reps'],               goal: 100 },
+  { code: 'pushup',    name: '푸쉬업',   group: '맨몸',   icon: '💪', fields: ['reps'],               goal: 400 },
+  { code: 'pullup',    name: '풀업',     group: '맨몸',   icon: '🧗', fields: ['reps'],               goal: 100  },
+  { code: 'core',      name: '복부',     group: '맨몸',   icon: '🔥', fields: ['reps'],               goal: 400 },
+  { code: 'leg',       name: '하체',     group: '맨몸',   icon: '🦵', fields: ['reps'],               goal: 1000 },
   { code: 'run',       name: '달리기',   group: '유산소', icon: '🏃', fields: ['time', 'distance'] },
   { code: 'swim_free', name: '자유형',   group: '수영',   icon: '🏊', fields: ['time', 'laps'] },
   { code: 'swim_back', name: '배영',     group: '수영',   icon: '🌊', fields: ['time', 'laps'], active: false },
@@ -39,6 +39,7 @@ export const EXERCISES = [
   { code: 'cycling',   name: '사이클',   group: '유산소', icon: '🚲', fields: ['time', 'distance'] },
   { code: 'badminton', name: '배드민턴', group: '기타',   icon: '🏸', fields: ['time'] },
   { code: 'hiking',    name: '등산',     group: '기타',   icon: '⛰️', fields: ['time', 'distance'] },
+  { code: 'plank',     name: '플랭크',   group: '맨몸',   icon: '🧘', fields: ['reps'] },
   { code: 'etc',       name: '기타',     group: '기타',   icon: '➕', fields: ['time'] },
 ];
 
