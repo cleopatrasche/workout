@@ -34,13 +34,15 @@ export const EXERCISES = [
   { code: 'leg',       name: '하체',     group: '맨몸',   icon: '🦵', fields: ['reps'],               goal: 1000 },
   { code: 'run',       name: '달리기',   group: '유산소', icon: '🏃', fields: ['time', 'distance'] },
   { code: 'swim_free', name: '자유형',   group: '수영',   icon: '🏊', fields: ['time', 'laps'] },
-  { code: 'swim_back', name: '배영',     group: '수영',   icon: '🌊', fields: ['time', 'laps'], active: false },
+  { code: 'swim_back', name: '배영',     group: '수영',   icon: '😴', fields: ['time', 'laps'], active: false },
   { code: 'swim_breast', name: '평영',   group: '수영',   icon: '🐸', fields: ['time', 'laps'], active: false },
   { code: 'cycling',   name: '사이클',   group: '유산소', icon: '🚲', fields: ['time', 'distance'] },
   { code: 'badminton', name: '배드민턴', group: '기타',   icon: '🏸', fields: ['time'] },
   { code: 'hiking',    name: '등산',     group: '기타',   icon: '⛰️', fields: ['time', 'distance'] },
   { code: 'plank',     name: '플랭크',   group: '맨몸',   icon: '🧘', fields: ['time'] },
   { code: 'etc',       name: '기타',     group: '기타',   icon: '➕', fields: ['time'] },
+  { code: 'pedometer', name: '만보기',   group: '유산소', icon: '👣', fields: ['reps'] },
+  { code: 'squat',     name: '스쿼트',   group: '맨몸',   icon: '🍑', fields: ['reps'] },
 ];
 
 // ── 3. 운동 매뉴얼 링크 ─────────────────────────────────────────
